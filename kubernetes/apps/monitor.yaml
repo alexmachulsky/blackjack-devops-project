@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitor-stack
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'git@github.com:alexmachulsky/blackjack-k8s.git'
+    targetRevision: main
+    path: monitor-stack
+    helm:
+      valueFiles:
+        - values.yaml
+      releaseName: monitor-stack
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: monitor    # Change if you use a different namespace
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - Validate=true

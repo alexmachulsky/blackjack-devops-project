@@ -1,0 +1,222 @@
+name: CI/CD Pipeline - BlackJack App
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/*'
+
+permissions:
+  contents: write
+
+jobs:
+  Build-application:
+    name: Build Application (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Start Blackjack for Unit tests
+        run: |
+          nohup python app.py > app.log 2>&1 &
+          echo "Waiting for Blackjack to start..."
+          for i in {1..30}; do
+            if curl -sSf http://localhost:5000 > /dev/null; then
+              echo "✅ Blackjack is up!"
+              break
+            fi
+            echo "⏳ Still waiting for Blackjack... ($i)"
+            sleep 1
+          done
+          curl --fail http://localhost:5000 || (echo "❌ App did not respond!" && cat app.log && exit 1)
+
+  Package-application:
+    name: Package Application (${{ github.ref_name }})
+    needs: Build-application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image using Buildx (with cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: blackjack:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            CACHEBUST=${{ github.run_id }}
+
+      - name: Cleanup Docker
+        run: |
+          docker system prune -af
+          docker builder prune -af
+
+  E2E-tests:
+    name: Run E2E Tests (${{ github.ref_name }})
+    needs: Package-application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Start E2E environment with docker compose and check DB connection
+        run: |
+          docker compose up -d
+          echo "Waiting for Blackjack to start and connect to MongoDB..."
+          for i in {1..30}; do
+            if curl -sSf http://localhost:5000/health | grep -q ok; then
+              echo "✅ App is up AND connected to MongoDB!"
+              break
+            fi
+            echo "⏳ Still waiting for app+DB... ($i)"
+            sleep 1
+          done
+          curl --fail http://localhost:5000/health || (echo "❌ App failed DB check!" && docker compose logs && exit 1)
+
+      - name: Test MongoDB-backed /person API
+        run: |
+          echo "👉 Sending test user data via PUT..."
+          put_response=$(curl -s -o /dev/null -w "%{http_code}" -X PUT http://localhost:5000/person/testuser \
+            -H 'Content-Type: application/json' \
+            -d '{"win": 3, "loss": 1, "draw": 1}')
+
+          if [ "$put_response" -ne 200 ]; then
+            echo "❌ PUT /person/testuser failed with status $put_response"
+            exit 1
+          fi
+
+          echo "✅ PUT successful."
+
+          echo "👉 Fetching data via GET..."
+          get_response=$(curl -s http://localhost:5000/person/testuser)
+          echo "Response: $get_response"
+
+          if [[ "$get_response" != *'"win": 3'* || "$get_response" != *'"loss": 1'* || "$get_response" != *'"draw": 1'* ]]; then
+            echo "❌ GET /person/testuser returned incorrect data!"
+            exit 1
+          fi
+
+          echo "✅ GET data validated."
+
+          echo "🧼 Cleaning up test user..."
+          curl -s -X DELETE http://localhost:5000/person/testuser > /dev/null
+
+          echo "✅ MongoDB-backed /person API test passed!"
+
+      - name: Remove E2E environment with docker compose
+        run: |
+          docker compose down -v
+
+  Push-to-ECR:
+    name: Push to ECR and Trigger CD (${{ github.ref_name }})
+    if: github.ref == 'refs/heads/main'
+    needs: E2E-tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Rebuild Docker image using cache
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: blackjack:latest
+          cache-from: type=gha
+          build-args: |
+            CACHEBUST=${{ github.run_id }}
+          outputs: type=docker
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.ECR_REGION }}
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.ECR_REGION }} | \
+          docker login --username AWS --password-stdin ${{ secrets.ECR_REPO_URI }}
+
+      - name: Get the latest Git tag and increment patch version
+        id: increment_version
+        run: |
+          git fetch --tags
+          latest_tag=$(git tag -l | sort -V | tail -n 1)
+
+          if [ -z "$latest_tag" ]; then
+            new_tag="1.0.0"
+          else
+            major=$(echo $latest_tag | cut -d '.' -f 1 | sed 's/v//')
+            minor=$(echo $latest_tag | cut -d '.' -f 2)
+            patch=$(echo $latest_tag | cut -d '.' -f 3)
+            patch=$((patch + 1))
+            new_tag="${major}.${minor}.${patch}"
+          fi
+
+          echo "✅ New Git version tag: $new_tag"
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+      - name: Create and push Git tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.increment_version.outputs.new_tag }}
+          git push origin ${{ steps.increment_version.outputs.new_tag }}
+
+      - name: Tag Docker images correctly
+        run: |
+          docker tag blackjack:latest ${{ secrets.ECR_REPO_URI }}:latest
+          docker tag blackjack:latest ${{ secrets.ECR_REPO_URI }}:${{ steps.increment_version.outputs.new_tag }}
+
+      - name: Push Docker images to ECR
+        run: |
+          docker push ${{ secrets.ECR_REPO_URI }}:latest
+          docker push ${{ secrets.ECR_REPO_URI }}:${{ steps.increment_version.outputs.new_tag }}
+
+      - name: Update blackjack image tag in values.yaml and push to GitOps repo
+        run: |
+          # Clone with PAT
+          git clone https://x-access-token:${{ secrets.GITOPS_PAT }}@github.com/alexmachulsky/blackjack-k8s.git
+          cd blackjack-k8s/blackjack-stack
+
+          # Install yq (Python version, runs as a CLI)
+          pip install yq
+
+          # Update the blackjack.image.tag field
+          yq -y '.blackjack.image.tag = "${{ steps.increment_version.outputs.new_tag }}"' values.yaml > values.tmp && mv values.tmp values.yaml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add values.yaml
+          git commit -m "ci: bump blackjack image tag to ${{ steps.increment_version.outputs.new_tag }}"
+
+          # Push with PAT
+          git push https://x-access-token:${{ secrets.GITOPS_PAT }}@github.com/alexmachulsky/blackjack-k8s.git HEAD:main
+
+
+

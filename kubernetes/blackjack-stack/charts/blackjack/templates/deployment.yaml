@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "blackjack.fullname" . }}-app
+  labels:
+    app: {{ include "blackjack.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "blackjack.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "blackjack.fullname" . }}
+    spec:
+      containers:
+        - name: blackjack
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.targetPort }}
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongo.uriSecretName }}
+                  key: {{ .Values.mongo.uriKey }}
+            - name: MONGO_DB
+              value: "{{ .Values.mongo.db }}"
+            - name: MONGO_COLL
+              value: "{{ .Values.mongo.collection }}"

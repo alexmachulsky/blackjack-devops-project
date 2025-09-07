@@ -1,0 +1,58 @@
+blackjack:
+  nameOverride: blackjack-stack
+  fullnameOverride: blackjack-stack
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: 033567013533.dkr.ecr.ap-south-1.amazonaws.com/blackjack-develeap
+    tag: 1.0.85
+    pullPolicy: Always
+  mongo:
+    uriSecretName: mongo-secret
+    uriKey: mongo-uri
+    db: blackjackdb
+    collection: userstats
+  serviceMonitor:
+    enabled: false
+  ingress:
+    enabled: true
+    annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: /
+    hosts:
+      - host: blackjack-app.ddns.net
+        paths:
+          - path: /
+            pathType: Prefix
+mongodb:
+  architecture: replicaset
+  replicaCount: 2
+  replicaSetName: rs0
+  arbiter:
+    enabled: false
+  podManagementPolicy: Parallel
+  auth:
+    enabled: true
+    existingSecret: mongodb-secret
+  replicaSetHostnames: true
+  directoryPerDB: false
+  systemLogVerbosity: 1
+  disableJavascript: false
+  enableJournal: true
+  extraEnvVars:
+    - name: MONGODB_INITIAL_PRIMARY_HOST
+      value: "blackjack-stack-mongodb-0.blackjack-stack-mongodb-headless.default.svc.cluster.local"
+    - name: MONGODB_SET_SECONDARY_OK
+      value: "yes"
+    - name: MONGODB_REPLICA_SET_MODE
+      value: "primary"
+  configuration: |
+    # MongoDB configuration for replica set
+    replication:
+      replSetName: rs0
+    net:
+      bindIpAll: true
+  persistence:
+    enabled: true
+  resources:
+    requests:
+      cpu: 200m

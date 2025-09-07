@@ -1,0 +1,9 @@
+dependencies:
+- name: blackjack
+  repository: file://./charts/blackjack
+  version: 1.0.0
+- name: mongodb
+  repository: https://charts.bitnami.com/bitnami
+  version: 16.5.24
+digest: sha256:b4c82a90b754ddd1f68e5dcf57e16a5e92a329e7dd4a1de5686d3d060a1f7394
+generated: "2025-07-10T13:21:18.649642555+03:00"

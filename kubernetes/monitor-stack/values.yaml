@@ -1,0 +1,25 @@
+prometheus:
+  namespace: monitoring
+  prometheusSpec:
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelector: {}
+    serviceMonitorSelectorNilUsesHelmValues: true
+    podMonitorNamespaceSelector: {}
+    podMonitorSelector: {}
+    podMonitorSelectorNilUsesHelmValues: true
+  
+
+grafana:
+  namespace: monitoring
+  persistence:
+    enabled: true
+    storageClassName: "ebs-csi-gp3"
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+
+
+
+
+
+    

@@ -1,0 +1,49 @@
+name: Deploy to EKS (Helm)
+
+on:
+  repository_dispatch:
+    types: [blackjack-deploy]
+
+jobs:
+  Deploy-to-EKS:
+    runs-on: ubuntu-latest
+    env:
+      NAMESPACE: ${{ vars.K8S_NAMESPACE }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.ECR_REGION }}
+
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig --region ${{ vars.ECR_REGION }} --name ${{ vars.EKS_CLUSTER_NAME }}
+
+      - name: Show current context (debug)
+        run: kubectl config current-context
+
+      - name: Rollout with Helm
+        run: |
+          TAG=${{ github.event.client_payload.image_tag }}
+          ROOT_USER="${{ secrets.MONGO_ROOT_USER }}"
+          ROOT_PASS="${{ secrets.MONGO_ROOT_PASSWORD }}"
+          REPL_KEY="${{ secrets.MONGO_REPLICA_SET_KEY }}"
+
+          helm upgrade --install blackjack-stack ./blackjack-stack \
+            --namespace $NAMESPACE \
+            --create-namespace \
+            --set blackjack.image.repository=${{ secrets.ECR_REPO_URI }} \
+            --set blackjack.image.tag=$TAG \
+            --set blackjack.image.pullPolicy=Always \
+            --set global.mongodb.auth.rootUser=$ROOT_USER \
+            --set global.mongodb.auth.rootPassword=$ROOT_PASS \
+            --set global.mongodb.auth.replicaSetKey=$REPL_KEY \
+            --atomic --timeout 5m
+
+      - name: Show all resources (debug)
+        run: kubectl get all

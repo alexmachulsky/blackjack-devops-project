@@ -1,0 +1,33 @@
+replicaCount: 2
+image:
+  repository: 033567013533.dkr.ecr.ap-south-1.amazonaws.com/blackjack-develeap
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 5000
+
+mongo:
+  uriSecretName: mongo-secret
+  uriKey: mongo-uri
+  db: blackjackdb
+  collection: userstats
+
+
+ingress:
+  enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: "/"
+  hosts:
+    - host: blackjack-app.ddns.net
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+
+serviceMonitor:
+  enabled: true
+  release: monitor-stack
