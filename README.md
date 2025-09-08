@@ -9,7 +9,7 @@
 
 ## 🏗️ Architecture Overview
 
-![Architecture Diagram](./architecture-diagram.png)
+![Architecture Diagram](./project-portfolio.png)
 
 *Complete CI/CD pipeline and AWS infrastructure showing the full DevOps workflow from code commit to production deployment.*
 
