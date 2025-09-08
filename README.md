@@ -1,8 +1,14 @@
 # Blackjack DevOps Project
 
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?&logo=terraform&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?&logo=amazon-aws&logoColor=white)
+![Python](https://img.shields.io/badge/python-3670A0?logo=python&logoColor=ffdd54)
+
 A complete end-to-end DevOps project demonstrating modern cloud-native application deployment using AWS EKS, Terraform, ArgoCD, and GitOps practices.
 
-## �� Project Overview
+## 🎯 Project Overview
 
 This project showcases a full-stack blackjack game application deployed on AWS EKS using infrastructure as code, GitOps, and modern DevOps practices. It includes:
 
@@ -62,27 +68,50 @@ This project showcases a full-stack blackjack game application deployed on AWS E
 
 ### Prerequisites
 - AWS CLI configured with appropriate permissions
-- Terraform >= 1.0
-- kubectl
-- Helm >= 3.0
+- Terraform >= 1.5.0
+- kubectl >= 1.27.0
+- Helm >= 3.8.0
 - Docker
+
+**Required AWS Permissions:**
+- EKS Full Access
+- EC2 Full Access
+- VPC Full Access
+- IAM permissions for role creation
+- Route53 (if using custom domains)
+
+**💰 Estimated Monthly Cost:** $50-80 USD (depending on usage)
 
 ### 1. Deploy Infrastructure
 
-\`\`\`bash
+```bash
 cd infrastructure/TerraformEKS_withEBS-CSI-StorageClass
 terraform init
 terraform plan
 terraform apply
-\`\`\`
+```
 
 ### 2. Configure kubectl
 
-\`\`\`bash
-aws eks update-kubeconfig --region <your-region> --name <cluster-name>
-\`\`\`
+```bash
+# Replace with your actual region and cluster name
+aws eks update-kubeconfig --region us-west-2 --name blackjack-eks-cluster
+```
 
-### 3. Deploy Applications
+### 3. Verify Deployment
+
+```bash
+# Check cluster nodes
+kubectl get nodes
+
+# Check ArgoCD installation
+kubectl get pods -n argocd
+
+# Get ArgoCD admin password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+```
+
+### 4. Deploy Applications
 
 The applications will be automatically deployed via ArgoCD once the infrastructure is ready.
 
@@ -114,7 +143,7 @@ The applications will be automatically deployed via ArgoCD once the infrastructu
 
 Access monitoring dashboards:
 
-\`\`\`bash
+```bash
 # Grafana
 kubectl port-forward -n monitoring svc/grafana 3000:80
 
@@ -123,27 +152,27 @@ kubectl port-forward -n logging svc/kibana 5601:5601
 
 # ArgoCD
 kubectl port-forward -n argocd svc/argocd-server 8080:80
-\`\`\`
+```
 
 ## 🛠️ Development
 
 ### Local Development
 
-\`\`\`bash
+```bash
 cd app/
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python app.py
-\`\`\`
+```
 
 ### Building Container Image
 
-\`\`\`bash
+```bash
 cd app/
 docker build -t blackjack-app .
 docker run -p 5000:5000 blackjack-app
-\`\`\`
+```
 
 ## 🔄 GitOps Workflow
 
@@ -157,9 +186,9 @@ docker run -p 5000:5000 blackjack-app
 
 The application supports horizontal scaling:
 
-\`\`\`bash
+```bash
 kubectl scale deployment blackjack-app --replicas=5
-\`\`\`
+```
 
 MongoDB replica set provides database scaling and high availability.
 
@@ -188,15 +217,39 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ### Common Issues
 
 1. **EKS Access Denied**: Ensure AWS credentials have proper EKS permissions
-2. **Pod CrashLoopBackOff**: Check logs with \`kubectl logs <pod-name>\`
+2. **Pod CrashLoopBackOff**: Check logs with `kubectl logs <pod-name>`
 3. **ArgoCD Sync Issues**: Verify GitHub repository access
 4. **Secret Sync Failures**: Check External Secrets Operator logs
 
 ### Getting Help
 
-- Check the logs: \`kubectl logs -n <namespace> <pod-name>\`
-- Describe resources: \`kubectl describe <resource-type> <resource-name>\`
-- Monitor events: \`kubectl get events --sort-by='.metadata.creationTimestamp'\`
+- Check the logs: `kubectl logs -n <namespace> <pod-name>`
+- Describe resources: `kubectl describe <resource-type> <resource-name>`
+- Monitor events: `kubectl get events --sort-by='.metadata.creationTimestamp'`
+
+## 🧹 Cleanup & Cost Management
+
+**⚠️ Important:** To avoid ongoing AWS charges, destroy the infrastructure when not needed:
+
+```bash
+cd infrastructure/TerraformEKS_withEBS-CSI-StorageClass
+terraform destroy
+```
+
+**Manual Cleanup (if needed):**
+- Delete any remaining Load Balancers in AWS Console
+- Check for orphaned EBS volumes
+- Verify VPC resources are removed
+
+## 📊 Demo & Screenshots
+
+### Application Interface
+Access the blackjack game at: `http://<load-balancer-dns>/`
+
+### Monitoring Dashboards
+- **Grafana**: `kubectl port-forward -n monitoring svc/grafana 3000:80`
+- **Kibana**: `kubectl port-forward -n logging svc/kibana 5601:5601`
+- **ArgoCD**: `kubectl port-forward -n argocd svc/argocd-server 8080:80`
 
 ## 🏆 Project Highlights
 
@@ -212,3 +265,22 @@ This project demonstrates:
 ---
 
 Built with ❤️ for learning and demonstrating modern DevOps practices.
+
+## ❓ Frequently Asked Questions
+
+**Q: How much will this cost to run?**
+A: Approximately $50-80/month depending on usage. Use `terraform destroy` when not needed.
+
+**Q: Can I use a different AWS region?**
+A: Yes, update the region in `variables.tf` and ensure all services are available in your chosen region.
+
+**Q: How do I access the application?**
+A: After deployment, get the Load Balancer DNS from `kubectl get ingress` and access via browser.
+
+**Q: Why is ArgoCD not syncing?**
+A: Check repository access, ensure the GitHub repository is public or configure SSH keys.
+
+**Q: Can I customize the MongoDB configuration?**
+A: Yes, modify the values in `kubernetes/blackjack-stack/values.yaml` for MongoDB settings.
+
+## 📝 License
