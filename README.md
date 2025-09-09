@@ -157,11 +157,7 @@ terraform destroy
 
 ---
 
-## 📄 License
-
-📝 **MIT License** - see the [LICENSE](LICENSE) file for details.
-
-## 📊 Monitoring
+##  Monitoring
 
 Access monitoring dashboards:
 
